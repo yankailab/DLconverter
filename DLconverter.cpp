@@ -16,11 +16,13 @@
 using namespace std;
 using namespace tinyxml2;
 
+bool addObj(XMLElement* pObj, string* pOut, string* pErr);
+
 int main(int argc, const char ** argv)
 {
 	if (argc <= 2)
 	{
-		printf("usage: dlconv [input folder name] [output folder name]\n");
+		printf("usage: ./dlconv [input folder name] [output folder name]\n");
 		exit(1);
 	}
 
@@ -40,6 +42,7 @@ int main(int argc, const char ** argv)
 		exit(0);
 	}
 
+	string errAll = "";
 	int nFile = 0;
 	int nSuccess = 0;
 
@@ -52,7 +55,7 @@ int main(int argc, const char ** argv)
 		if (extpos == std::string::npos)continue;
 		if (fileName.substr(extpos) != ".xml")continue;
 
-		printf("[%d]\t%s\t: ", nFile++, fileName.c_str());
+		printf("[%d]\t%s\n", nFile++, fileName.c_str());
 
 		XMLDocument* pXML = new XMLDocument();
 		pXML->LoadFile(fileName.c_str());
@@ -60,19 +63,15 @@ int main(int argc, const char ** argv)
 
 		if(errorID!=0)
 		{
-			printf("Error: %d\n", errorID);
-			pXML->PrintError();
-			printf("\n");
+			errAll += fileName + " : "+ pXML->ErrorName() + "\n";
 			delete pXML;
 			continue;
 		}
 
-		printf("Parsed: ");
-
 		XMLElement* pAnnotation = pXML->FirstChildElement("annotation");
 		if(!pAnnotation)
 		{
-			printf("<annotation> not found\n");
+			errAll += fileName + " : <annotation> not found\n";
 			delete pXML;
 			continue;
 		}
@@ -80,111 +79,134 @@ int main(int argc, const char ** argv)
 		XMLElement* pFilename = pAnnotation->FirstChildElement("filename");
 		if(!pFilename)
 		{
-			printf("<filename> not found\n");
-			delete pXML;
-			continue;
-		}
-		string outFileName = dirOut + pFilename->GetText();
-		outFileName	+= ".txt";
-
-		XMLElement* pObject = pAnnotation->FirstChildElement("object");
-		if(!pObject)
-		{
-			printf("<object> not found\n");
-			delete pXML;
-			continue;
-		}
-
-		XMLElement* pName = pObject->FirstChildElement("name");
-		if(!pName)
-		{
-			printf("<name> not found\n");
-			delete pXML;
-			continue;
-		}
-		string objName = pName->GetText();
-
-		XMLElement* pBndbox = pObject->FirstChildElement("bndbox");
-		if(!pBndbox)
-		{
-			printf("<bndbox> not found\n");
+			errAll += fileName + " : <filename> not found\n";
 			delete pXML;
 			continue;
 		}
 
 
-		XMLElement* pXmin = pBndbox->FirstChildElement("xmin");
-		if(!pXmin)
-		{
-			printf("<xmin> not found\n");
-			delete pXML;
-			continue;
-		}
-
-		XMLElement* pYmin = pBndbox->FirstChildElement("ymin");
-		if(!pYmin)
-		{
-			printf("<ymin> not found\n");
-			delete pXML;
-			continue;
-		}
-
-		XMLElement* pXmax = pBndbox->FirstChildElement("xmax");
-		if(!pXmax)
-		{
-			printf("<xmax> not found\n");
-			delete pXML;
-			continue;
-		}
-
-		XMLElement* pYmax = pBndbox->FirstChildElement("ymax");
-		if(!pYmax)
-		{
-			printf("<ymax> not found\n");
-			delete pXML;
-			continue;
-		}
-
-		string xmin = pXmin->GetText();
-		string ymin = pYmin->GetText();
-		string xmax = pXmax->GetText();
-		string ymax = pYmax->GetText();
-
-		delete pXML;
-//		printf("%s,[%s,%s,%s,%s] ",objName.c_str(),xmin.c_str(),ymin.c_str(),xmax.c_str(),ymax.c_str());
-
-		//Output
+		string err = "";
 		string kitti = "";
 
-		//KITTI data format per line
-		//Type, Truncated, Occluded, Angle, BBox[4], Dim[3], Loc[3], Rot
-		kitti += objName + " 0 0 0 " + xmin + " " + ymin + " " + xmax + " " + ymax + " 0 0 0 0 0 0 0";
-		printf("[%s] ", kitti.c_str());
+		XMLElement* pObject = pAnnotation->FirstChildElement("object");
+		while(pObject)
+		{
+			if(!addObj(pObject, &kitti, &err))
+			{
+				errAll += fileName + " : " + err;
+				continue;
+			}
+
+			pObject = pObject->NextSiblingElement("object");
+		}
+
+		if(kitti.length()<=0)
+		{
+			errAll += fileName + " : no object found\n";
+			delete pXML;
+			continue;
+		}
+
+		//is it needed to erase the last \n?
+		kitti.erase(kitti.length()-1);
+
+		string outFileName = dirOut + pFilename->GetText();
+		outFileName	+= ".txt";
 
 		ofstream kittiFile;
 		kittiFile.open(outFileName.c_str(),ios::out);
 	    if(!kittiFile)
 		{
-			printf("Cannot open output file\n");
+			errAll += fileName + " : " + outFileName + " : open failed\n";
 	    	continue;
 	    }
 
 	    kittiFile.write(kitti.c_str(), kitti.length());
 	    kittiFile.close();
 
-		printf("\tConverted\n");
 		nSuccess++;
-
+		delete pXML;
 	}
 
 	closedir(pDir);
 
+	printf("-----------------------------------------------------\n");
+	printf("%s\n",errAll.c_str());
 	printf("%d files processed\n", nFile);
 	printf("%d files converted\n", nSuccess);
 
 	return 0;
 
 }
+
+bool addObj(XMLElement* pObj, string* pOut, string* pErr)
+{
+	if(pObj==NULL)return false;
+	if(pOut==NULL)return false;
+	if(pErr==NULL)return false;
+
+	XMLElement* pName = pObj->FirstChildElement("name");
+	if(!pName)
+	{
+		*pErr = "<name> not found\n";
+		return false;
+	}
+	string objName = pName->GetText();
+
+	XMLElement* pBndbox = pObj->FirstChildElement("bndbox");
+	if(!pBndbox)
+	{
+		*pErr = "<bndbox> not found";
+		return false;
+	}
+
+	XMLElement* pXmin = pBndbox->FirstChildElement("xmin");
+	if(!pXmin)
+	{
+		*pErr = "<xmin> not found\n";
+		return false;
+	}
+
+	XMLElement* pYmin = pBndbox->FirstChildElement("ymin");
+	if(!pYmin)
+	{
+		*pErr = "<ymin> not found\n";
+		return false;
+	}
+
+	XMLElement* pXmax = pBndbox->FirstChildElement("xmax");
+	if(!pXmax)
+	{
+		*pErr = "<xmax> not found\n";
+		return false;
+	}
+
+	XMLElement* pYmax = pBndbox->FirstChildElement("ymax");
+	if(!pYmax)
+	{
+		*pErr = "<ymax> not found\n";
+		return false;
+	}
+
+	string xmin = pXmin->GetText();
+	string ymin = pYmin->GetText();
+	string xmax = pXmax->GetText();
+	string ymax = pYmax->GetText();
+
+//	delete pXML;
+//		printf("%s,[%s,%s,%s,%s] ",objName.c_str(),xmin.c_str(),ymin.c_str(),xmax.c_str(),ymax.c_str());
+
+	//Output
+//	string kitti = "";
+
+	//KITTI data format per line
+	//Type, Truncated, Occluded, Angle, BBox[4], Dim[3], Loc[3], Rot
+	*pOut += objName + " 0 0 0 " + xmin + " " + ymin + " " + xmax + " " + ymax + " 0 0 0 0 0 0 0\n";
+//	printf("[%s] ", kitti.c_str());
+
+	return true;
+}
+
 
 /*
  <?xml version="1.0" ?>
