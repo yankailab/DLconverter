@@ -20,14 +20,15 @@ bool addObj(XMLElement* pObj, string* pOut, string* pErr);
 
 int main(int argc, const char ** argv)
 {
-	if (argc <= 2)
+	if (argc <= 3)
 	{
-		printf("usage: ./dlconv [input folder name] [output folder name]\n");
+		printf("usage: ./dlconv [input folder name] [output folder name] [image folder]\n");
 		exit(1);
 	}
 
 	string dirIn = argv[1];
 	string dirOut = argv[2];
+	string dirImg = argv[3];
 
 	dirIn += "/";
 	dirOut += "/";
@@ -111,7 +112,13 @@ int main(int argc, const char ** argv)
 		kitti.erase(kitti.length()-1);
 
 		string outFileName = dirOut + pFilename->GetText();
+		size_t pDot = outFileName.find_last_of(".");
+		if (pDot != std::string::npos)
+		{
+			outFileName.erase(pDot);
+		}
 		outFileName	+= ".txt";
+
 
 		ofstream kittiFile;
 		kittiFile.open(outFileName.c_str(),ios::out);
@@ -193,51 +200,9 @@ bool addObj(XMLElement* pObj, string* pOut, string* pErr)
 	string xmax = pXmax->GetText();
 	string ymax = pYmax->GetText();
 
-//	delete pXML;
-//		printf("%s,[%s,%s,%s,%s] ",objName.c_str(),xmin.c_str(),ymin.c_str(),xmax.c_str(),ymax.c_str());
-
-	//Output
-//	string kitti = "";
-
 	//KITTI data format per line
 	//Type, Truncated, Occluded, Angle, BBox[4], Dim[3], Loc[3], Rot
 	*pOut += objName + " 0 0 0 " + xmin + " " + ymin + " " + xmax + " " + ymax + " 0 0 0 0 0 0 0\n";
-//	printf("[%s] ", kitti.c_str());
 
 	return true;
 }
-
-
-/*
- <?xml version="1.0" ?>
- <annotation>
- <folder>HondaChargeStation</folder>
- <filename>P1010105</filename>
- <path>/home/kang/Downloads/HondaChargeStation/P1010105.JPG</path>
- <source>
- <database>Unknown</database>
- </source>
- <size>
- <width>2048</width>
- <height>1536</height>
- <depth>3</depth>
- </size>
- <segmented>0</segmented>
- <object>
- <name>miimo_charge_station</name>
- <pose>Unspecified</pose>
- <truncated>0</truncated>
- <difficult>0</difficult>
- <bndbox>
- <xmin>777</xmin>
- <ymin>627</ymin>
- <xmax>1309</xmax>
- <ymax>796</ymax>
- </bndbox>
- </object>
- </annotation>
- */
-
-/*
- Pedestrian 0.00 0 -0.20 712.40 143.00 810.73 307.92 1.89 0.48 1.20 1.84 1.47 8.41 0.01
- */
