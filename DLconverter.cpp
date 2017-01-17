@@ -10,6 +10,8 @@
 #include <string>
 #include <string.h>
 #include <iostream>
+#include <sys/types.h>
+#include <sys/stat.h>
 
 #include "include/tinyxml2.h"
 
@@ -26,28 +28,134 @@ int main(int argc, const char ** argv)
 		exit(1);
 	}
 
+	//Get directories
 	string dirIn = argv[1];
 	string dirOut = argv[2];
 	string dirImg = argv[3];
 
-	dirIn += "/";
-	dirOut += "/";
+	if(dirIn.at(dirIn.length()-1)!='/')dirIn.push_back('/');
+	if(dirOut.at(dirOut.length()-1)!='/')dirOut.push_back('/');
+	if(dirImg.at(dirImg.length()-1)!='/')dirImg.push_back('/');
 
-	DIR* pDir;
-	struct dirent *dir;
-	pDir = opendir(dirIn.c_str());
+	DIR* pDirIn;
+	DIR* pDirOut;
+	DIR* pDirImg;
 
-	if (!pDir)
+	pDirIn = opendir(dirIn.c_str());
+	pDirImg = opendir(dirImg.c_str());
+	pDirOut = opendir(dirOut.c_str());
+
+	if (!pDirIn)
 	{
-		printf("Directory not found");
+		cout << "Input directory not found" << endl;
 		exit(0);
 	}
 
+	if (!pDirImg)
+	{
+		cout << "Image directory not found" << endl;
+		exit(0);
+	}
+
+	if (!pDirOut)
+	{
+		if(mkdir(dirOut.c_str(), 0777)!=0)
+		{
+			cout << "mkdir failed: " << dirOut << endl;
+			exit(0);
+		}
+
+		pDirOut = opendir(dirOut.c_str());
+		if(!pDirOut)
+		{
+			cout << "Directory opening failed: " << dirOut << endl;
+			exit(0);
+		}
+	}
+
+	struct dirent *dir;
+	string fileIn;
+	string fileImg;
+	size_t extPos;
+	ifstream inFile;
+
+	//Delete non xml files
+	while ((dir = readdir(pDirIn)) != NULL)
+	{
+		fileIn = dirIn + dir->d_name;
+
+		extPos = fileIn.find(".xml");
+		if (extPos == std::string::npos)
+		{
+			remove(fileIn.c_str());
+			continue;
+		}
+
+		if (fileIn.substr(extPos) != ".xml")
+		{
+			remove(fileIn.c_str());
+			continue;
+		}
+
+		//delete if no correspondent image file is found
+		fileImg = dirImg + dir->d_name;
+		fileImg.erase(fileImg.find(".xml"));
+		fileImg += ".jpg";
+		inFile.open(fileImg.c_str(),ios::in);
+	    if(!inFile)
+		{
+			remove(fileIn.c_str());
+	    	continue;
+	    }
+	    else
+	    {
+	    	inFile.close();
+	    }
+	}
+
+	//Delete non jpg files
+	while ((dir = readdir(pDirImg)) != NULL)
+	{
+		fileImg = dirImg + dir->d_name;
+
+		extPos = fileImg.find(".jpg");
+		if (extPos == std::string::npos)
+		{
+			remove(fileImg.c_str());
+			continue;
+		}
+
+		if (fileImg.substr(extPos) != ".jpg")
+		{
+			remove(fileImg.c_str());
+			continue;
+		}
+
+		//delete if no correspondent xml file is found
+		fileIn = dirIn+ dir->d_name;
+		fileIn.erase(fileIn.find(".jpg"));
+		fileIn += ".xml";
+		inFile.open(fileIn.c_str(),ios::in);
+	    if(!inFile)
+		{
+			remove(fileImg.c_str());
+	    	continue;
+	    }
+	    else
+	    {
+	    	inFile.close();
+	    }
+	}
+
+	//Convert PASCAL VOC into kitti
 	string errAll = "";
 	int nFile = 0;
 	int nSuccess = 0;
 
-	while ((dir = readdir(pDir)) != NULL)
+	closedir(pDirIn);
+	pDirIn = opendir(dirIn.c_str());
+
+	while ((dir = readdir(pDirIn)) != NULL)
 	{
 		string fileName = dir->d_name;
 		fileName = dirIn + fileName;
@@ -135,7 +243,7 @@ int main(int argc, const char ** argv)
 		delete pXML;
 	}
 
-	closedir(pDir);
+	closedir(pDirIn);
 
 	printf("-----------------------------------------------------\n");
 	printf("%s\n",errAll.c_str());
@@ -206,3 +314,5 @@ bool addObj(XMLElement* pObj, string* pOut, string* pErr)
 
 	return true;
 }
+
+
